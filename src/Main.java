@@ -50,6 +50,8 @@ public class Main {
         System.out.println("Prob bad with bad review: " + prob2);
         System.out.println("Prob good with bad review: " + prob3);
         System.out.println("Prob bad with good review: " + prob4);
+
+        testData(testFile);
     }
 
     static int readText(String file) {
@@ -67,8 +69,8 @@ public class Main {
     }
 
     static void genUnigramsForDocument() {
-        for (int i = 0; i < trainingReviewList.size(); i++) {
-            String[] reviewWords = trainingReviewList.get(i).split(" ");
+        for (String s : trainingReviewList) {
+            String[] reviewWords = s.split(" ");
             //Save the name of the review. Ex: "cv666_tok_13320.txt"
             reviewName.add(reviewWords[0]);
             if (Integer.parseInt(reviewWords[1]) == 1) {
@@ -82,8 +84,7 @@ public class Main {
                 }
                 //Keeping track of how many positive reviews there are
                 numPosReview++;
-            }
-            else {
+            } else {
                 //We ignore the first 2 in array because they are file name and pos/neg indicator
                 for (int j = 2; j < reviewWords.length; j++) {
                     Integer count = negHashMap.get(reviewWords[j]);
@@ -116,9 +117,6 @@ public class Main {
             prob = wordFreq / (hashMap.size() + generateTypeCount());
             totalProb = totalProb * prob;
         }
-        System.out.println("Class prob: " + classProb);
-        System.out.println("total prob: " + totalProb);
-        System.out.println("Final: " + classProb * totalProb);
         return classProb * totalProb;
     }
 
@@ -127,5 +125,52 @@ public class Main {
         hashMap.putAll(posHashMap);
         hashMap.putAll(negHashMap);
         return hashMap.size();
+    }
+
+    static void testData(String file) {
+        ArrayList<String> reviewList = new ArrayList<>();
+        String[] reviewWords;
+        double wordFreq;
+        double prob;
+        double posProb = 0;
+        double negProb = 0;
+        try {
+            Scanner scanner = new Scanner(new File("C:\\Users\\cjske\\IdeaProjects\\PA 3\\" + file));
+            while (scanner.hasNextLine()) {
+                numReviews++;
+                reviewList.add(scanner.nextLine());
+            }
+            scanner.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        for (String s : reviewList) {
+            reviewWords = s.split(" ");
+            for (String w : reviewWords) {
+                if (posHashMap.get(w) == null && negHashMap.get(w) == null) {break;}
+                if (posHashMap.get(w) == null)
+                    wordFreq = 1;
+                else
+                    wordFreq = posHashMap.get(w);
+                prob = wordFreq / posHashMap.size() + generateTypeCount();
+                posProb = posProb * prob;
+                if (negHashMap.get(w) == null)
+                    wordFreq = 1;
+                else
+                    wordFreq = negHashMap.get(w);
+                prob = wordFreq / negHashMap.size() + generateTypeCount();
+                negProb = negProb * prob;
+            }
+            System.out.println ("PosProb: " + posProb);
+            System.out.println ("NegProb: " + negProb);
+
+            if (posProb > negProb) {
+                System.out.println("Positive");
+            }
+            else {
+                System.out.println("Negative");
+            }
+        }
     }
 }
