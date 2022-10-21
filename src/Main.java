@@ -1,13 +1,19 @@
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Scanner;
 
 import static java.lang.Integer.parseInt;
+import static java.lang.Math.log;
 
 public class Main {
 
     static double numReviews = 0; //Total number of reviews
+    static double TYPES;
     //List of each review as a string
     static ArrayList<String> trainingReviewList = new ArrayList<>();
     //Name of each review so we can output at the end
@@ -23,7 +29,6 @@ public class Main {
     static double negReviewProb = 0;
 
     public static void main(String[] args) throws IOException {
-
         int n = parseInt(args[0]); //Unigram frequency cutoff
         String trainingFile = args[1]; //Training file name
         String testFile = args[2]; //Test file name
@@ -35,23 +40,14 @@ public class Main {
         posReviewProb = numPosReview / numReviews;
         negReviewProb = numNegReview / numReviews;
 
-        //Read reviews
-
-        double prob1,prob2, prob3, prob4;
+        double prob1, prob2;
         String badReview = "bad horrible terrible boring";
         String goodReview = "great fantastic good amazing";
-        prob1 = calcProbabilities(posHashMap, goodReview, true);
-        prob2 = calcProbabilities(negHashMap, badReview, false);
-        //flipped
-        prob3 = calcProbabilities(posHashMap, badReview, true);
-        prob4 = calcProbabilities(negHashMap, goodReview, false);
-
-        System.out.println("Prob good with good review: " + prob1);
-        System.out.println("Prob bad with bad review: " + prob2);
-        System.out.println("Prob good with bad review: " + prob3);
-        System.out.println("Prob bad with good review: " + prob4);
+        prob1 = trainBayes(posHashMap, goodReview, true);
+        prob2 = trainBayes(negHashMap, badReview, false);
 
         testData(testFile);
+
     }
 
     static int readText(String file) {
@@ -71,8 +67,6 @@ public class Main {
     static void genUnigramsForDocument() {
         for (String s : trainingReviewList) {
             String[] reviewWords = s.split(" ");
-            //Save the name of the review. Ex: "cv666_tok_13320.txt"
-            reviewName.add(reviewWords[0]);
             if (Integer.parseInt(reviewWords[1]) == 1) {
                 //We ignore the first 2 in array because they are file name and pos/neg indicator
                 for (int j = 2; j < reviewWords.length; j++) {
@@ -99,7 +93,7 @@ public class Main {
         }
     }
 
-    static double calcProbabilities(Map<String, Integer> hashMap, String review, boolean isPos) {
+    static double trainBayes(Map<String, Integer> hashMap, String review, boolean isPos) {
         double classProb;
         double totalProb = 1;
         double prob = 0;
@@ -113,27 +107,27 @@ public class Main {
 
         for (String w : reviewWords) {
             wordFreq = hashMap.get(w);
-            wordFreq++;
-            prob = wordFreq / (hashMap.size() + generateTypeCount());
+            prob = wordFreq + 1 / (hashMap.size() + TYPES);
             totalProb = totalProb * prob;
         }
         return classProb * totalProb;
     }
 
-    static double generateTypeCount() {
+    static void generateTypeCount() {
         Map<String, Integer> hashMap = new HashMap<>();
         hashMap.putAll(posHashMap);
         hashMap.putAll(negHashMap);
-        return hashMap.size();
+        TYPES = hashMap.size();
     }
 
-    static void testData(String file) {
+    static void testData(String file) throws IOException {
         ArrayList<String> reviewList = new ArrayList<>();
+        ArrayList<Double> posProbList = new ArrayList<>();
+        ArrayList<Double> negProbList = new ArrayList<>();
+
         String[] reviewWords;
-        double wordFreq;
-        double prob;
-        double posProb = 0;
-        double negProb = 0;
+        double wordFreq, prob, posProb, negProb;
+
         try {
             Scanner scanner = new Scanner(new File("C:\\Users\\cjske\\IdeaProjects\\PA 3\\" + file));
             while (scanner.hasNextLine()) {
@@ -145,32 +139,66 @@ public class Main {
             e.printStackTrace();
         }
 
-        for (String s : reviewList) {
+        for (int j = 0; j < reviewList.size(); j++) {
+            String s = reviewList.get(j);
+            posProb = 0;
+            negProb = 0;
             reviewWords = s.split(" ");
-            for (String w : reviewWords) {
-                if (posHashMap.get(w) == null && negHashMap.get(w) == null) {break;}
+            //Save the name of the review. Ex: "cv666_tok_13320.txt"
+            reviewName.add(reviewWords[0]);
+
+            for (int i = 2; i < reviewWords.length; i++) {
+                String w = reviewWords[i];
                 if (posHashMap.get(w) == null)
                     wordFreq = 1;
                 else
                     wordFreq = posHashMap.get(w);
-                prob = wordFreq / posHashMap.size() + generateTypeCount();
-                posProb = posProb * prob;
+                prob = log(wordFreq / (posHashMap.size() + TYPES));
+                posProb = posProb + prob;
+
                 if (negHashMap.get(w) == null)
                     wordFreq = 1;
                 else
                     wordFreq = negHashMap.get(w);
-                prob = wordFreq / negHashMap.size() + generateTypeCount();
-                negProb = negProb * prob;
+                prob = log(wordFreq / (negHashMap.size() + TYPES));
+                negProb = negProb + prob;
             }
-            System.out.println ("PosProb: " + posProb);
-            System.out.println ("NegProb: " + negProb);
 
-            if (posProb > negProb) {
+            posProb = posProb + log(posReviewProb);
+            negProb = negProb + log(negReviewProb);
+            posProbList.add(posProb);
+            negProbList.add(negProb);
+
+            if (posProb > negProb)
                 System.out.println("Positive");
-            }
-            else {
+            else
                 System.out.println("Negative");
+
+        }
+        genResults(posProbList, negProbList);
+    }
+
+    //This function outputs the probabilities for each review to the answers file
+    static void genResults(ArrayList<Double> posProbList, ArrayList<Double> negProbList) throws IOException {
+        FileWriter myWriter = new FileWriter("naive-bayes-answers.txt");
+        try {
+            for(int i = 0; i < reviewName.size(); i++) {
+                //Print review name
+                myWriter.write(reviewName.get(i) + " ");
+                //Print the probability for it being positive
+                myWriter.write(posProbList.get(i) + " ");
+                //Print the probability for it being negative
+                myWriter.write(negProbList.get(i) + " ");
+                //Print whether it is positive or negative
+                if (posProbList.get(i) > negProbList.get(i))
+                    myWriter.write("1\n");
+                else
+                    myWriter.write("0\n");
             }
+            myWriter.close();
+        } catch (IOException e) {
+            System.out.println("An error occurred.");
+            e.printStackTrace();
         }
     }
 }
